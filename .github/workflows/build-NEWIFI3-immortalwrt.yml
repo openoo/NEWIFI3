@@ -1,0 +1,163 @@
+name: Build ImmortalWrt for NEWIFI3
+
+on:
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+env:
+    REPO_URL: https://github.com/immortalwrt/immortalwrt
+    REPO_BRANCH: openwrt-24.10
+    CONFIG_FILE: NEWIFI3-IMMORTALWRT/.config
+    DIY_SH: NEWIFI3-IMMORTALWRT/diy.sh
+    FILES: NEWIFI3-IMMORTALWRT/files
+    TZ: Asia/Shanghai
+
+jobs:
+    build:
+        runs-on: ubuntu-22.04
+
+        steps:
+            - name: Free Disk Space
+              uses: jlumbroso/free-disk-space@v1.3.1
+              with:
+                  tool-cache: true
+                  android: true
+                  dotnet: true
+                  haskell: true
+                  large-packages: true
+                  swap-storage: true
+
+            - name: Check disk space
+              run: |
+                  echo "Free space:"
+                  df -h
+
+            - name: Checkout
+              uses: actions/checkout@v6
+
+            - name: Initialization environment
+              env:
+                  DEBIAN_FRONTEND: noninteractive
+              run: |
+                  sudo -E apt-mark hold grub-efi-amd64-signed
+                  sudo -E apt-get -qq update --fix-missing
+                  sudo -E apt-get -qq full-upgrade
+                  sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+                  sudo timedatectl set-timezone "$TZ"
+
+            - name: Clone source code
+              working-directory: ./
+              run: |
+                  git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+
+            - name: Cache build (ccache, dl, toolchain)
+              uses: actions/cache@v5
+              with:
+                  path: |
+                      ~/.ccache
+                      openwrt/dl
+                      openwrt/build_dir/host
+                      openwrt/build_dir/toolchain-*
+                      openwrt/staging_dir/host
+                      openwrt/staging_dir/toolchain-*
+                  key: ${{ runner.os }}-openwrt-NEWIFI3-${{ env.REPO_BRANCH }}-${{ hashFiles('NEWIFI3-IMMORTALWRT/.config') }}
+                  restore-keys: |
+                      ${{ runner.os }}-openwrt-NEWIFI3-${{ env.REPO_BRANCH }}-
+
+            - name: Update & Install feeds
+              working-directory: ./openwrt
+              run: |
+                  ./scripts/feeds update -a
+                  ./scripts/feeds install -a
+                  curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
+                  rm -rf package/network/utils/fullconenat-nft
+
+            - name: Load custom config
+              run: |
+                  [ -e $FILES ] && cp -a $FILES openwrt/files
+                  [ -e $CONFIG_FILE ] && cp $CONFIG_FILE openwrt/.config
+                  chmod +x $DIY_SH
+                  cd openwrt
+                  $GITHUB_WORKSPACE/$DIY_SH
+
+            - name: Clean stale source cache
+              working-directory: ./openwrt
+              run: |
+                  rm -rf dl/go-mod-cache
+                  rm -f dl/*tcping* dl/*shadowsocks-libev* dl/*shadowsocksr-libev* dl/*simple-obfs* dl/*trojan-plus* dl/*Xray-core* dl/*xray-core*
+
+            - name: Download package
+              working-directory: ./openwrt
+              run: |
+                  make defconfig
+                  make download -j8
+                  find dl -size -1024c -exec ls -l {} \;
+                  find dl -size -1024c -exec rm -f {} \;
+
+            - name: Compile the firmware
+              id: compile
+              run: |
+                  chmod -R 755 openwrt
+                  cd openwrt
+                  echo -e "$(nproc) thread compile"
+                  make -j$(nproc) || make -j1 V=s
+                  echo "status=success" >> $GITHUB_OUTPUT
+
+            - name: Prepare release artifacts
+              if: ${{ steps.compile.outputs.status == 'success' && !cancelled() }}
+              run: |
+                  mkdir -p release_artifacts
+                  cp -a openwrt/bin/targets/*/*/*newifi-d2*bin release_artifacts/
+                  echo "release_date=$(date +%Y%m%d)" >> $GITHUB_ENV
+
+            - name: Upload ImmortalWrt Firmware to Release
+              if: ${{ steps.compile.outputs.status == 'success' && !cancelled() }}
+              uses: ncipollo/release-action@v1
+              with:
+                  tag: ImmortalWrt_NEWIFI3_${{ env.release_date }}
+                  artifacts: release_artifacts/*
+                  allowUpdates: true
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  body: |
+                      基于 ImmortalWrt 24.10 构建
+                      设备: NEWIFI3
+                      首次使用建议全新刷写
+                      * 基本信息
+                      IP: 192.168.123.1
+                      账户: root
+                      密码: password
+                      * 说明
+                      usb共享网络已自动启用 支持安卓手机,苹果手机,随身wifi等
+
+            - name: Delete old releases
+              uses: actions/github-script@v8
+              env:
+                  KEEP_LATEST: 10
+                  DELETE_TAGS: true
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  script: |
+                      const keepLatest = Number(process.env.KEEP_LATEST || 10);
+                      const deleteTags = String(process.env.DELETE_TAGS || "true").toLowerCase() === "true";
+                      const { owner, repo } = context.repo;
+                      const prefix = "ImmortalWrt_NEWIFI3_";
+                      const releases = await github.paginate(
+                        github.rest.repos.listReleases,
+                        { owner, repo, per_page: 100 }
+                      );
+                      const filtered = releases
+                        .filter((release) => release.tag_name && release.tag_name.startsWith(prefix))
+                        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                      const toDelete = filtered.slice(keepLatest);
+                      for (const release of toDelete) {
+                        await github.rest.repos.deleteRelease({ owner, repo, release_id: release.id });
+                        if (deleteTags && release.tag_name) {
+                          try {
+                            await github.rest.git.deleteRef({ owner, repo, ref: `tags/${release.tag_name}` });
+                          } catch (err) {
+                            core.warning(`Failed to delete tag ${release.tag_name}: ${err.message}`);
+                          }
+                        }
+                      }
