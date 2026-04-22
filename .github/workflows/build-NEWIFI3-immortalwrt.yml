@@ -71,8 +71,6 @@ jobs:
               run: |
                   ./scripts/feeds update -a
                   ./scripts/feeds install -a
-                  curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
-                  rm -rf package/network/utils/fullconenat-nft
 
             - name: Load custom config
               run: |
