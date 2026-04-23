@@ -1,364 +1,217 @@
-# NEWIFI3 ImmortalWrt 24.10 固件构建项目
+# NEWIFI3 ImmortalWrt 24.10
 
-这是一个面向 `NEWIFI3 / Newifi-D2` 的 `ImmortalWrt 24.10` 自定义固件构建仓库。
+这是一个用于自动编译 `NEWIFI3 / Newifi-D2` 固件的自定义构建项目。
 
-项目目标很明确：
+项目不保存完整 ImmortalWrt 源码，只保存构建配置、自定义脚本和覆盖文件。GitHub Actions 运行时会自动拉取上游源码并完成编译。
 
-- 以 `ImmortalWrt 24.10` 为基础源码
-- 面向 `ramips/mt7621` 平台下的 `d-team_newifi-d2`
-- 保留并集成当前项目所需的核心功能
-- 使用 `GitHub Actions` 自动完成在线编译和发布
+## 基本信息
 
-这不是一个完整的 ImmortalWrt 源码仓库，而是一个“自定义构建层”仓库。仓库中只保存构建工作流、自定义配置、覆盖文件和编译前脚本；真正的上游源码会在 CI 运行时从官方仓库拉取。
+- 上游源码：`https://github.com/immortalwrt/immortalwrt`
+- 上游分支：`openwrt-24.10`
+- 目标平台：`ramips/mt7621`
+- 目标设备：`d-team_newifi-d2`
+- 默认地址：`192.168.123.1`
+- 默认时区：`Asia/Shanghai`
+- 构建方式：GitHub Actions 手动触发
 
-## 项目定位
-
-这个项目主要用于构建一套适合 NEWIFI3 使用的 ImmortalWrt 固件，并在尽量少改动项目结构的前提下，保留以下功能：
-
-- 默认管理地址改为 `192.168.123.1`
-- 默认时区设置为 `Asia/Shanghai`
-- 自动启用 USB 共享网络
-- 支持安卓手机、苹果手机、随身 WiFi 等 USB 网络接入方式
-- 集成 `Passwall`
-- 集成 `Turbo ACC`
-- 使用 `Aurora` LuCI 主题，并启用其配置插件
-- 保留 NEWIFI3 设备所需的无线驱动
-
-## 仓库结构
-
-当前仓库结构如下：
+## 目录结构
 
 ```text
 .
-├─ .github/
-│  └─ workflows/
-│     └─ build-NEWIFI3-immortalwrt.yml
+├─ .github/workflows/build-NEWIFI3-immortalwrt.yml
 ├─ NEWIFI3-IMMORTALWRT/
 │  ├─ .config
 │  ├─ diy.sh
 │  └─ files/
 │     └─ etc/
-│        ├─ config/
-│        │  └─ system
+│        ├─ config/system
 │        └─ uci-defaults/
 │           ├─ 99-newifi3-luci-theme
 │           └─ 99-newifi3-usb-tether
 └─ README.md
 ```
 
-各文件职责如下：
+## 主要功能
 
-- `.github/workflows/build-NEWIFI3-immortalwrt.yml`
-  负责 GitHub Actions 自动构建、缓存、打包和发布。
+- 使用 `ImmortalWrt 24.10` 构建 NEWIFI3 固件
+- 默认 LAN 地址为 `192.168.123.1`
+- 自动配置 USB 共享网络
+- 支持安卓手机、苹果手机、USB 网卡等 USB 网络接入
+- 集成 `Passwall`
+- 显式内置 `xray-core`
+- 使用 `Aurora` LuCI 主题
+- 启用 `luci-app-aurora-config`
+- 保留 NEWIFI3 所需的 `mt76` 无线驱动栈
+- 显式禁用 `vlmcsd` / `luci-app-vlmcsd`
 
-- `NEWIFI3-IMMORTALWRT/.config`
-  负责定义目标平台、设备、软件包选择以及部分显式关闭项。
+## 构建流程
 
-- `NEWIFI3-IMMORTALWRT/diy.sh`
-  负责在上游源码拉取并安装 feeds 后，对源码树进行额外定制，例如拉取 Passwall、Aurora 主题、替换 Golang 组件、修改默认 IP 等。
-
-- `NEWIFI3-IMMORTALWRT/files/etc/config/system`
-  负责写入系统默认配置，例如主机名、时区、NTP 服务器和 LED 行为。
-
-- `NEWIFI3-IMMORTALWRT/files/etc/uci-defaults/99-newifi3-usb-tether`
-  负责在系统首次启动时自动创建 USB 网络接口并加入 WAN 防火墙区域。
-
-- `NEWIFI3-IMMORTALWRT/files/etc/uci-defaults/99-newifi3-luci-theme`
-  负责在系统首次启动时将 LuCI 默认主题切换为 `Aurora`。
-
-## 上游源码与构建方式
-
-项目当前使用的上游源码为：
-
-- 源码仓库：`https://github.com/immortalwrt/immortalwrt`
-- 分支：`openwrt-24.10`
-
-GitHub Actions 工作流会执行以下大致流程：
-
-1. 检出当前仓库
-2. 安装编译依赖
-3. 克隆 `ImmortalWrt 24.10` 源码到 `openwrt/`
-4. 更新并安装 feeds
-5. 额外拉取 `Turbo ACC`
-6. 删除与 Turbo ACC 冲突的 `fullconenat-nft`
-7. 拷贝本仓库中的 `files`、`.config`
-8. 执行 `diy.sh`
-9. `make defconfig`
-10. 下载源码包
-11. 编译固件
-12. 收集 `newifi-d2` 产物
-13. 发布到 GitHub Release
-
-## 当前集成的主要功能
-
-### 1. 设备目标
-
-当前固件构建目标为：
-
-- 平台：`ramips`
-- 子平台：`mt7621`
-- 设备：`d-team_newifi-d2`
-
-也就是 NEWIFI3 / Newifi-D2。
-
-### 2. 默认网络设置
-
-项目中已经将默认 LAN 地址修改为：
+工作流文件为：
 
 ```text
-192.168.123.1
+.github/workflows/build-NEWIFI3-immortalwrt.yml
 ```
 
-这个修改通过两部分实现：
+大致流程：
 
-- 在 `diy.sh` 中修改上游默认生成逻辑
-- 在 USB 共享网络初始化脚本中再次明确写入 LAN 地址
+1. 拉取当前仓库
+2. 安装编译依赖
+3. 克隆 `ImmortalWrt openwrt-24.10`
+4. 更新并安装 feeds
+5. 拷贝 `.config` 和 `files`
+6. 执行 `NEWIFI3-IMMORTALWRT/diy.sh`
+7. 执行 `make defconfig`
+8. 下载源码包
+9. 编译固件
+10. 上传固件到 GitHub Release
 
-这样可以尽量避免首次启动时仍回落到 `192.168.1.1`。
+## 自定义脚本
 
-### 3. USB 共享网络
+`NEWIFI3-IMMORTALWRT/diy.sh` 主要做这些事：
 
-项目针对 USB 共享网络做了专门处理，适合以下使用场景：
+- 替换 `feeds/packages/lang/golang`
+- 引入 Passwall 官方软件包仓库
+- 引入 Aurora 主题和配置插件
+- 修改默认 LAN 地址为 `192.168.123.1`
+- 在 `rc.local` 中启动 `usbmuxd`
+- 如果存在 autocore 页面，则调整时间显示格式
 
-- 安卓手机 USB 共享
-- 苹果手机 USB 共享
-- 随身 WiFi / USB 网卡方式联网
+## USB 共享网络
 
-当前启用了相关 USB 网络驱动和用户态组件，例如：
+项目通过 `99-newifi3-usb-tether` 在首次启动时自动创建：
 
-- `kmod-usb-core`
-- `kmod-usb2`
-- `kmod-usb3`
-- `kmod-usb-net`
-- `kmod-usb-net-rndis`
-- `kmod-usb-net-ipheth`
-- `usbmuxd`
-- `libimobiledevice`
+- `usbv4`
+- `usbv6`
 
-系统首次启动时，`99-newifi3-usb-tether` 会自动：
+并将它们绑定到 `usb0`，加入防火墙 `wan` 区域。
 
-- 创建 `usbv4` 接口
-- 创建 `usbv6` 接口
-- 将接口绑定到 `usb0`
-- 把它们加入防火墙 `wan` 区域
+相关用途：
 
-这样做的目的是尽可能让 USB 共享网络开箱即用。
+- 安卓手机 USB 共享网络
+- 苹果手机 USB 共享网络
+- 部分 USB 网卡或随身 WiFi
 
-### 4. 无线功能
+## WiFi 配置
 
-为了保证 NEWIFI3 在 `ImmortalWrt 24.10` 下无线功能稳定，项目显式保留了与设备硬件对应的无线驱动栈：
+NEWIFI3 使用 MT7621 平台，当前显式保留以下无线相关包：
 
-- `kmod-cfg80211`
-- `kmod-mac80211`
-- `kmod-mt76-core`
-- `kmod-mt7603`
-- `kmod-mt76x02-common`
-- `kmod-mt76x2`
-- `kmod-mt76x2-common`
-- `iw`
-- `iwinfo`
-- `wpad-openssl`
+```config
+CONFIG_PACKAGE_kmod-cfg80211=y
+CONFIG_PACKAGE_kmod-mac80211=y
+CONFIG_PACKAGE_kmod-mt76-core=y
+CONFIG_PACKAGE_kmod-mt7603=y
+CONFIG_PACKAGE_kmod-mt76x02-common=y
+CONFIG_PACKAGE_kmod-mt76x2=y
+CONFIG_PACKAGE_kmod-mt76x2-common=y
+CONFIG_PACKAGE_iw=y
+CONFIG_PACKAGE_iwinfo=y
+CONFIG_PACKAGE_wpad-openssl=y
+```
 
 其中：
 
-- `mt7603` 对应 2.4G
-- `mt76x2` 对应 5G
+- `mt7603` 用于 2.4G WiFi
+- `mt76x2` 用于 5G WiFi
+- `wpad-openssl` 用于无线认证与加密
 
-之所以显式写出这些项，而不是完全依赖默认选择，是为了降低跨发行版迁移时由于依赖变化造成无线异常的风险。
+## Passwall 与 Xray
 
-### 5. Passwall
+当前配置为：
 
-项目当前启用了：
-
-- `luci-app-passwall`
-
-Passwall 的源码接入方式参考其官方 README 的编译方法，并在 `diy.sh` 中完成以下操作：
-
-- 删除与 Passwall 相关的上游冲突包
-- 克隆 `openwrt-passwall-packages`
-- 克隆 `openwrt-passwall`
-
-同时项目保留了对 `feeds/packages/lang/golang` 的替换：
-
-- 删除上游默认 `golang`
-- 使用 `sbwml/packages_lang_golang` 的 `26.x` 分支替换
-
-这样做的目的是提升部分 Go 语言软件包在当前构建环境下的兼容性。
-
-### 6. Turbo ACC
-
-项目已集成 `Turbo ACC`，方式参考你提供的可编译成功示例。
-
-在 GitHub Actions 构建过程中会执行：
-
-```bash
-curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
-rm -rf package/network/utils/fullconenat-nft
+```config
+CONFIG_PACKAGE_luci-app-passwall=y
+CONFIG_PACKAGE_xray-core=y
 ```
 
-删除 `fullconenat-nft` 的原因是：
+这里显式启用 `xray-core`，目的是确保固件内置 `/usr/bin/xray`，而不是只依赖 Passwall 的组件更新页面。
 
-- `ImmortalWrt` 自带的某些 `nft fullcone` 组件
-- 与 `Turbo ACC` 引入的组件存在冲突
+## 关于 Turbo ACC
 
-### 7. Aurora 主题
+当前项目不启用 `luci-app-turboacc`。
 
-项目当前不再使用旧的 `design` 主题，而是改为：
+相关配置已显式关闭：
+
+```config
+CONFIG_PACKAGE_luci-app-turboacc=n
+CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_OFFLOADING=n
+CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_BBR_CCA=n
+CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_NFT_FULLCONE=n
+```
+
+原因：
+
+- 当前工作流没有引入 `luci-app-turboacc` 的包源
+- 仅在 `.config` 中写 `CONFIG_PACKAGE_luci-app-turboacc=y` 不会生效
+- 之前尝试接入外部 `add_turboacc.sh` 会修改内核补丁链
+- 该脚本与当前 `ImmortalWrt 24.10 / Linux 6.6.x` 存在补丁冲突，导致内核 headers 阶段编译失败
+
+如果需要加速功能，建议优先使用 ImmortalWrt 原生的防火墙流量分载、FullCone NAT、BBR 等能力，而不是强行接入外部 Turbo ACC 脚本。
+
+## Aurora 主题
+
+项目使用：
 
 - `luci-theme-aurora`
 - `luci-app-aurora-config`
 
-这两个包会在 `diy.sh` 中分别从官方仓库拉取：
+并通过 `99-newifi3-luci-theme` 在首次启动时设置默认主题：
 
-- `https://github.com/eamonxg/luci-theme-aurora`
-- `https://github.com/eamonxg/luci-app-aurora-config`
-
-并在系统首次启动时通过 `uci-defaults` 脚本将 LuCI 默认主题切换为：
-
-```text
-/luci-static/aurora
+```sh
+uci -q set luci.main.mediaurlbase='/luci-static/aurora'
+uci commit luci
 ```
 
-### 8. 中文与本地化
+## 不需要的组件
 
-项目当前保留中文环境相关设置，例如：
+项目显式禁用了 KMS 相关组件：
 
-- 系统时区：`Asia/Shanghai`
-- NTP 服务器使用国内可用节点
-- LuCI 使用简体中文
+```config
+CONFIG_PACKAGE_vlmcsd=n
+CONFIG_PACKAGE_luci-app-vlmcsd=n
+```
 
-## 为什么不直接提交完整 ImmortalWrt 源码
+也显式禁用了默认 Bootstrap 主题：
 
-因为这个项目的重点不是维护整个上游源码，而是维护“我的设备需要什么定制”。
-
-这种做法的优点是：
-
-- 仓库更小
-- 更容易看清项目自身改了什么
-- 上游更新时更容易切换分支
-- CI 中每次都从干净源码开始，问题更容易定位
-
-缺点也存在：
-
-- 如果上游包名或依赖关系变化，`.config` 或 `diy.sh` 可能需要同步调整
-- 第三方包和主题的兼容性需要跟着上游变化一起维护
-
-## 当前工作流文件说明
-
-主工作流文件：
-
-- `.github/workflows/build-NEWIFI3-immortalwrt.yml`
-
-它的主要特点有：
-
-- 使用 `workflow_dispatch` 手动触发
-- 启用了 `ccache` 与下载缓存
-- 编译成功后自动上传到 GitHub Release
-- 自动清理旧版本 Release，只保留最近若干版本
-
-发布信息中会包含：
-
-- 设备型号
-- 默认 IP
-- 默认账户信息
-- USB 共享网络说明
+```config
+CONFIG_PACKAGE_luci-theme-bootstrap=n
+```
 
 ## 使用方式
 
-### 方式一：直接在 GitHub Actions 中构建
-
-1. Fork 本仓库
-2. 打开 GitHub Actions
-3. 手动运行 `Build ImmortalWrt for NEWIFI3`
+1. 打开 GitHub Actions
+2. 选择 `Build ImmortalWrt for NEWIFI3`
+3. 点击 `Run workflow`
 4. 等待构建完成
-5. 到 Release 页面下载固件
-
-### 方式二：本地编译
-
-如果你希望本地编译，可以参考工作流中的流程：
-
-1. 克隆本仓库
-2. 手动克隆 `ImmortalWrt 24.10` 源码
-3. 更新并安装 feeds
-4. 拷贝 `NEWIFI3-IMMORTALWRT/files`
-5. 拷贝 `NEWIFI3-IMMORTALWRT/.config`
-6. 执行 `NEWIFI3-IMMORTALWRT/diy.sh`
-7. 运行 `make defconfig`
-8. 运行 `make download`
-9. 运行 `make -j$(nproc)`
+5. 在 Release 页面下载固件
 
 ## 输出产物
 
-编译完成后，工作流会从如下路径收集 NEWIFI3 固件：
+工作流会收集：
 
 ```text
 openwrt/bin/targets/*/*/*newifi-d2*bin
 ```
 
-通常你最终使用的是：
+通常使用 `sysupgrade.bin` 进行升级。
 
-- `sysupgrade.bin`
+首次从其他固件迁移时，请根据自己的刷机环境确认是否需要使用 Breed、uboot 或其他刷机方式。
 
-如果是首次从其他固件迁移，请务必根据自己的刷机方式判断是否需要先刷工厂镜像或 Breed/uboot 兼容镜像。
+## 维护提示
 
-## 注意事项
+后续如果构建失败，优先检查：
 
-### 1. 这不是官方原版固件
-
-虽然上游使用的是 `ImmortalWrt 24.10`，但本项目额外引入了：
-
-- Passwall
-- Turbo ACC
-- Aurora 主题
-- 第三方 Golang 替换
-- USB 共享网络初始化脚本
-
-因此它属于“带自定义增强”的个人构建方案。
-
-### 2. 第三方包可能随上游变化失效
-
-以下部分都不是单纯依赖上游默认包：
-
-- Passwall
-- Turbo ACC
-- Aurora 主题与配置插件
-- Golang 替换
-
-如果未来上游分支更新导致某个包无法编译，需要优先检查：
-
-- 包仓库是否变更
-- 分支是否兼容 `openwrt-24.10`
-- 依赖包是否改名
-
-### 3. `.config` 已显式关闭部分不需要的包
-
-例如项目中已经明确关闭了：
-
-- `vlmcsd`
-- `luci-app-vlmcsd`
-- `luci-theme-bootstrap`
-
-这样做是为了避免某些上游默认包在 `make defconfig` 时被自动补回。
-
-## 后续维护建议
-
-如果你后续继续维护这个项目，建议重点关注以下几类变动：
-
-- `ImmortalWrt openwrt-24.10` 上游是否调整包名
-- `Passwall` 官方编译方式是否有变化
-- `Turbo ACC` 脚本是否更新
-- `Aurora` 主题与配置插件是否发生接口变化
-- `NEWIFI3` 相关无线驱动是否有拆包或合包
+- `ImmortalWrt openwrt-24.10` 上游是否更新
+- Passwall 编译方式是否变化
+- `xray-core` 在 `mipsel_24kc` 下是否仍可构建
+- Aurora 主题仓库是否调整结构
+- USB 共享网络相关包名是否变化
 
 ## 致谢
 
-本项目基于以下开源项目与社区成果构建：
+本项目使用或参考了以下项目：
 
 - `ImmortalWrt`
 - `OpenWrt-Passwall`
 - `sbwml/packages_lang_golang`
-- `chenmozhijin/turboacc`
 - `eamonxg/luci-theme-aurora`
 - `eamonxg/luci-app-aurora-config`
-
-感谢这些项目作者和维护者的持续工作。
