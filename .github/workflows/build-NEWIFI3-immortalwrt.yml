@@ -90,6 +90,11 @@ jobs:
               working-directory: ./openwrt
               run: |
                   make defconfig
+                  echo "Key final config values:"
+                  grep -E "CONFIG_PACKAGE_(luci-app-passwall|xray-core|luci-app-turboacc|vlmcsd|luci-app-vlmcsd|luci-theme-aurora|luci-app-aurora-config|kmod-mt7603|kmod-mt76x2|wpad-openssl)(=|_)" .config || true
+                  grep -q "^CONFIG_PACKAGE_xray-core=y$" .config
+                  grep -q "^CONFIG_PACKAGE_luci-app-vlmcsd=n$" .config
+                  grep -q "^CONFIG_PACKAGE_luci-app-turboacc=n$" .config
                   make download -j8
                   find dl -size -1024c -exec ls -l {} \;
                   find dl -size -1024c -exec rm -f {} \;
