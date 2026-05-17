@@ -10,11 +10,11 @@ git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/
 rm -rf feeds/luci/applications/luci-app-passwall
 git clone https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
 
-# 引入 Aurora 主题及其配置插件
-rm -rf package/luci-theme-aurora
-git clone --depth=1 https://github.com/eamonxg/luci-theme-aurora package/luci-theme-aurora
-rm -rf package/luci-app-aurora-config
-git clone --depth=1 https://github.com/eamonxg/luci-app-aurora-config package/luci-app-aurora-config
+# 引入 luci-theme-argon 主题及其配置插件
+rm -rf package/luci-theme-argon
+git clone --depth=1 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
+rm -rf package/luci-app-argon-config
+git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 
 # 修改默认 LAN 地址，并确保系统启动时运行 usbmuxd
 sed -i 's/192.168.1.1/192.168.123.1/g' package/base-files/files/bin/config_generate
